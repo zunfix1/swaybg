@@ -1,7 +1,7 @@
 project(
 	'swaybg',
 	'c',
-	version: '1.1.1',
+	version: '1.2.0',
 	license: 'MIT',
 	meson_version: '>=0.59.0',
 	default_options: [
@@ -25,6 +25,9 @@ is_freebsd = host_machine.system().startswith('freebsd')
 if is_freebsd
 	add_project_arguments('-D_C11_SOURCE', language: 'c')
 endif
+
+cc = meson.get_compiler('c')
+rt = cc.find_library('rt')
 
 wayland_client = dependency('wayland-client')
 wayland_protos = dependency('wayland-protocols', version: '>=1.14')
@@ -51,7 +54,7 @@ add_project_arguments([
 
 wl_protocol_dir = wayland_protos.get_variable('pkgdatadir')
 
-wayland_scanner_prog = find_program(wayland_scanner.get_variable('wayland_scanner'))
+wayland_scanner_prog = find_program(wayland_scanner.get_variable('wayland_scanner'), native: true)
 
 wayland_scanner_code = generator(
 	wayland_scanner_prog,
@@ -65,8 +68,7 @@ wayland_scanner_client = generator(
 	arguments: ['client-header', '@INPUT@', '@OUTPUT@'],
 )
 
-client_protos_src = []
-client_protos_headers = []
+protos_src = []
 
 client_protocols = [
 	wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',
@@ -76,42 +78,27 @@ client_protocols = [
 ]
 
 foreach filename : client_protocols
-	client_protos_src += wayland_scanner_code.process(filename)
-	client_protos_headers += wayland_scanner_client.process(filename)
+	protos_src += wayland_scanner_code.process(filename)
+	protos_src += wayland_scanner_client.process(filename)
 endforeach
 
-lib_client_protos = static_library(
-	'client_protos',
-	client_protos_src + client_protos_headers,
-	dependencies: [wayland_client]
-) # for the include directory
-
-client_protos = declare_dependency(
-	link_with: lib_client_protos,
-	sources: client_protos_headers,
-)
-
-dependencies = [
-	cairo,
-	client_protos,
-	gdk_pixbuf,
-	wayland_client,
-]
-
-sources = [
-	'background-image.c',
-	'cairo.c',
-	'log.c',
-	'main.c',
-	'pool-buffer.c',
-]
-
-swaybg_inc = include_directories('include')
-
-executable('swaybg',
-	sources,
-	include_directories: [swaybg_inc],
-	dependencies: dependencies,
+executable(
+	'swaybg',
+	[
+		'background-image.c',
+		'cairo.c',
+		'log.c',
+		'main.c',
+		'pool-buffer.c',
+		protos_src,
+	],
+	include_directories: 'include',
+	dependencies: [
+		cairo,
+		rt,
+		gdk_pixbuf,
+		wayland_client,
+	],
 	install: true
 )
 
